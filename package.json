@@ -18,5 +18,9 @@
   "bugs": {
     "url": "https://github.com/openscriptures/morphhb/issues"
   },
-  "homepage": "https://github.com/openscriptures/morphhb#readme"
+  "homepage": "https://github.com/openscriptures/morphhb#readme",
+  "dependencies": {
+    "fast-xml-parser": "^5.2.5",
+    "lodash.clonedeep": "^4.5.0"
+  }
 }
