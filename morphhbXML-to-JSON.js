@@ -39,51 +39,82 @@ const getBookData = (filename) => {
     const xmlData = fs.readFileSync(filename, 'utf8');
     const parser = new XMLParser({
       ignoreAttributes: false,
-      attributeNamePrefix: '',
-      isArray: (name) => ['chapter', 'verse', 'w'].includes(name),
-      // 名前空間を無視するように変更
+      attributeNamePrefix: '@_',
       ignoreNamespace: true,
+      // オプションで階層構造をフラットにしないように設定
+      // parseNodeValue: false,
+      // parseAttributeValue: false,
+      // preserveOrder: true
     });
     const parsedData = parser.parse(xmlData);
 
-    const osisText = parsedData.osisText || parsedData.osis:osisText; // Fallback for safety
-    const chapters = osisText?.chapter;
-
-    if (!chapters) {
-      console.error(`Error: No chapters or osisText element found in ${filename}`);
-      return [];
+    // ルート要素が<osis>であることを前提に、階層を深くする
+    const osisText = parsedData.osis.osisText;
+    
+    // osisText要素が見つからない場合はエラーを投げる
+    if (!osisText) {
+      console.error(`Error: osisText element not found in ${filename}`);
+      return null;
     }
 
-    const bookData = [];
-    for (const chapter of chapters) {
-      const verses = chapter.verse;
-      const verseArray = [];
-      if (verses) {
-        for (const verse of verses) {
-          const words = verse.w;
-          const wordArray = [];
-          if (words) {
-            for (const word of words) {
-              let lemma = word.lemma || '';
-              let morph = word.morph || '';
-              if (options.removeLemmaTypes) lemma = removeLemmaTypesFunc(lemma);
-              if (options.prefixLemmasWithH) lemma = prefixLemmasWithHFunc(lemma);
-              if (options.stripHFromMorph) morph = stripHFromMorphFunc(morph);
-              
-              let text = word['#text'] || '';
-              if (options.stripPointing) text = stripPointingFunc(text);
-              wordArray.push([text, lemma, morph]);
+    const bookData = {
+        bookName: osisText['@_osisIDWork'],
+        chapters: []
+    };
+    
+    // div要素にアクセス
+    const div = osisText.div;
+    if (!div) {
+        console.error(`Error: No div element found in ${filename}`);
+        return null;
+    }
+    
+    const chapters = div.chapter;
+    if (!chapters) {
+      console.error(`Error: No chapters element found in ${filename}`);
+      return null;
+    }
+
+    // chaptersが配列であることを保証
+    const chapterList = Array.isArray(chapters) ? chapters : [chapters];
+
+    for (const chapter of chapterList) {
+        const chapterData = {
+            chapterID: chapter['@_osisID'],
+            verses: []
+        };
+        const verses = chapter.verse;
+        
+        if (verses) {
+            // versesが配列であることを保証
+            const verseList = Array.isArray(verses) ? verses : [verses];
+            for (const verse of verseList) {
+                const verseData = {
+                    verseID: verse['@_osisID'],
+                    words: []
+                };
+                const words = verse.w;
+                
+                if (words) {
+                    const wordList = Array.isArray(words) ? words : [words];
+                    for (const word of wordList) {
+                        // オプショナルチェイニングで安全にプロパティにアクセス
+                        verseData.words.push([
+                            word?.['#text'] || '',
+                            word?.['@_lemma'] || '',
+                            word?.['@_morph'] || ''
+                        ]);
+                    }
+                }
+                chapterData.verses.push(verseData);
             }
-          }
-          verseArray.push(wordArray);
         }
-      }
-      bookData.push(verseArray);
+        bookData.chapters.push(chapterData);
     }
     return bookData;
   } catch (error) {
     console.error(`Error processing file: ${filename}`, error);
-    return [];
+    return null;
   }
 };
 
@@ -104,15 +135,12 @@ const main = () => {
     const remapped = cloneDeep(hebrew);
     const verseMapData = fs.readFileSync(path.join('wlc', 'VerseMap.xml'), 'utf8');
     const parser = new XMLParser({
-      ignoreAttributes: false,
-      attributeNamePrefix: '',
-      isArray: (name) => ['book', 'verse'].includes(name),
-      // 名前空間を無視するように変更
-      ignoreNamespace: true,
+        ignoreAttributes: false,
+        attributeNamePrefix: '@_',
+        ignoreNamespace: true,
     });
     const parsedMap = parser.parse(verseMapData);
-
-    // 名前空間を無視したため、接頭辞なしでアクセス
+    
     const books = parsedMap.verseMap.book;
     
     // ... (以降のremapVersesロジックは変更なし) ...
